@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "verify:fortyguard": "tsx scripts/verify-fortyguard.ts"
+    "verify:fortyguard": "tsx scripts/verify-fortyguard.ts",
+    "test": "vitest run"
   },
   "dependencies": {
     "next": "15.5.23",
@@ -26,6 +27,7 @@
     "postcss": "^8.5.6",
     "tailwindcss": "^4.1.13",
     "tsx": "^4.20.5",
-    "typescript": "^5.9.2"
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
   }
 }
