@@ -28,6 +28,10 @@ type HeatmapResult = {
 type SiteHourResult = { mean: number; min: number; max: number };
 type Job = { site: Site; hour: number };
 
+type CachedResponse = { date: string; sites: Record<string, Record<string, SiteHourResult>> };
+
+const responseCache = new Map<string, CachedResponse>();
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
@@ -221,8 +225,8 @@ export async function POST(request: Request): Promise<NextResponse> {
   }
   const sites = body.sites.filter(isValidSite);
   const hours = body.hours.filter(isValidHour);
-  if (sites.length !== body.sites.length || sites.length < 1 || sites.length > 4) {
-    return NextResponse.json({ error: "sites must contain 1 to 4 valid sites." }, { status: 400 });
+  if (sites.length !== body.sites.length || sites.length < 1 || sites.length > 3) {
+    return NextResponse.json({ error: "sites must contain 1 to 3 valid sites." }, { status: 400 });
   }
   if (hours.length !== body.hours.length || hours.length < 1 || hours.length > 24) {
     return NextResponse.json({ error: "hours must contain 1 to 24 valid hours." }, { status: 400 });
@@ -232,6 +236,10 @@ export async function POST(request: Request): Promise<NextResponse> {
   }
 
   try {
+    const cacheKey = JSON.stringify({ sites, date: body.date, hours: [...hours].sort((a, b) => a - b) });
+    const cached = responseCache.get(cacheKey);
+    if (cached) return NextResponse.json(cached);
+
     const jobs = sites.flatMap((site) => hours.map((hour) => ({ site, hour })));
     const measurements = await runWithConcurrency(jobs, apiKey, body.date);
     const response: Record<string, Record<string, SiteHourResult>> = {};
@@ -243,7 +251,9 @@ export async function POST(request: Request): Promise<NextResponse> {
       }
       response[site.id] = siteResults;
     }
-    return NextResponse.json(response);
+    const payload = { date: body.date, sites: response };
+    responseCache.set(cacheKey, payload);
+    return NextResponse.json(payload);
   } catch (error) {
     return errorResponse(error);
   }
