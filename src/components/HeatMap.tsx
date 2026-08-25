@@ -7,7 +7,7 @@ import "leaflet/dist/leaflet.css";
 
 export type MapSite = {
   id: string;
-  label: string;
+  name: string;
   lat: number;
   lng: number;
 };
@@ -28,12 +28,12 @@ function MapClickHandler({ onAdd, disabled }: Pick<HeatMapProps, "onAdd" | "disa
   return null;
 }
 
-function MarkerIcon({ label }: { label: string }): L.DivIcon {
+function namedPin(name: string): L.DivIcon {
   return L.divIcon({
-    className: "heatshift-marker",
-    html: `<span>${label}</span>`, 
-    iconSize: [34, 34],
-    iconAnchor: [17, 17],
+    className: "heatshift-pin",
+    html: `<span class="pin-wrap"><span class="pin-dot"></span><span class="pin-name">${name}</span></span>`,
+    iconSize: [0, 0],
+    iconAnchor: [7, 7],
   });
 }
 
@@ -48,12 +48,7 @@ export default function HeatMap({ sites, onAdd, onRemove, disabled }: HeatMapPro
   }, []);
 
   return (
-    <MapContainer
-      center={[33.4484, -112.074]}
-      zoom={12}
-      scrollWheelZoom
-      className="heatmap-canvas"
-    >
+    <MapContainer center={[33.4484, -112.074]} zoom={11} scrollWheelZoom className="heatmap-canvas">
       <TileLayer
         attribution="&copy; OpenStreetMap contributors"
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -63,7 +58,7 @@ export default function HeatMap({ sites, onAdd, onRemove, disabled }: HeatMapPro
         <Marker
           key={site.id}
           position={[site.lat, site.lng]}
-          icon={MarkerIcon({ label: site.label })}
+          icon={namedPin(site.name)}
           eventHandlers={{ click: () => onRemove(site.id) }}
         />
       ))}
