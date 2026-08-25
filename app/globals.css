@@ -249,3 +249,25 @@ button {
   .animate-reveal .hour-bar,
   .animate-reveal .summary-strip { animation: none; opacity: 1; }
 }
+
+/* Heat layer and site comparison controls */
+.heat-layer-controls { display: flex; align-items: center; gap: 9px; }
+.hour-select-label { display: flex; align-items: center; gap: 7px; color: #7f90a2; font-family: var(--font-geist-mono), monospace; font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; }
+.hour-select-label select { appearance: none; min-width: 76px; padding: 7px 24px 7px 9px; border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 6px; background: #101821; color: #dbe6f1; cursor: pointer; font-family: var(--font-geist-mono), monospace; font-size: 10px; }
+.heat-layer-toggle { padding: 7px 10px; border: 1px solid rgba(56, 189, 248, 0.28); border-radius: 6px; background: rgba(56, 189, 248, 0.07); color: #7dd3fc; cursor: pointer; font-size: 10px; font-weight: 650; transition: background 150ms ease, border-color 150ms ease; }
+.heat-layer-toggle:hover { border-color: rgba(56, 189, 248, 0.55); background: rgba(56, 189, 248, 0.13); }
+.heat-layer-active { border-color: rgba(74, 222, 128, 0.45); background: rgba(74, 222, 128, 0.1); color: #86efac; }
+.heatmap-canvas .leaflet-tooltip { border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 6px; background: rgba(9, 14, 20, 0.96); color: #dbe6f1; box-shadow: 0 7px 20px rgba(0, 0, 0, 0.4); font-size: 11px; }
+.heatmap-canvas .leaflet-tooltip::before { border-top-color: rgba(9, 14, 20, 0.96); }
+.site-header-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 7px; }
+.comparison-chip { display: inline-flex; align-items: center; min-height: 22px; padding: 3px 7px; border-radius: 5px; font-family: var(--font-geist-mono), monospace; font-size: 9px; font-weight: 650; white-space: nowrap; }
+.comparison-coolest { border: 1px solid rgba(74, 222, 128, 0.28); background: rgba(74, 222, 128, 0.09); color: #86efac; }
+.comparison-warmer { border: 1px solid rgba(251, 146, 60, 0.25); background: rgba(251, 146, 60, 0.08); color: #fdba74; }
+
+@media (max-width: 560px) {
+  .heat-layer-controls { width: 100%; margin-top: 12px; justify-content: space-between; }
+  .site-header-meta { align-items: flex-end; }
+  .comparison-chip { white-space: normal; text-align: right; }
+}
+
+.freshness-chip { padding: 4px 8px; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 5px; background: rgba(255, 255, 255, 0.035); color: #8290a0; font-family: var(--font-geist-mono), monospace; font-size: 9px; white-space: nowrap; }

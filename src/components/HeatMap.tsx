@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { MapContainer, Marker, TileLayer, useMapEvents } from "react-leaflet";
+import { MapContainer, Marker, Polygon, TileLayer, Tooltip, useMapEvents } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
@@ -12,11 +12,31 @@ export type MapSite = {
   lng: number;
 };
 
+export type MapHeatBand = "Low" | "Moderate" | "High" | "Extreme";
+
+export type MapHeatTile = {
+  id: string;
+  siteName: string;
+  hour: number;
+  temperature: number;
+  band: MapHeatBand;
+  positions: [number, number][];
+};
+
 type HeatMapProps = {
   sites: MapSite[];
+  heatTiles: MapHeatTile[];
+  showHeatLayer: boolean;
   onAdd: (lat: number, lng: number) => void;
   onRemove: (id: string) => void;
   disabled?: boolean;
+};
+
+const BAND_COLORS: Record<MapHeatBand, string> = {
+  Low: "#38bdf8",
+  Moderate: "#facc15",
+  High: "#fb923c",
+  Extreme: "#ef4444",
 };
 
 function MapClickHandler({ onAdd, disabled }: Pick<HeatMapProps, "onAdd" | "disabled">) {
@@ -37,7 +57,14 @@ function namedPin(name: string): L.DivIcon {
   });
 }
 
-export default function HeatMap({ sites, onAdd, onRemove, disabled }: HeatMapProps) {
+export default function HeatMap({
+  sites,
+  heatTiles,
+  showHeatLayer,
+  onAdd,
+  onRemove,
+  disabled,
+}: HeatMapProps) {
   useEffect(() => {
     delete (L.Icon.Default.prototype as unknown as { _getIconUrl?: unknown })._getIconUrl;
     L.Icon.Default.mergeOptions({
@@ -54,6 +81,21 @@ export default function HeatMap({ sites, onAdd, onRemove, disabled }: HeatMapPro
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
       <MapClickHandler onAdd={onAdd} disabled={disabled} />
+      {showHeatLayer && heatTiles.map((tile) => {
+        const color = BAND_COLORS[tile.band];
+        return (
+          <Polygon
+            key={tile.id}
+            positions={tile.positions}
+            pathOptions={{ color, fillColor: color, fillOpacity: 0.5, opacity: 0.82, weight: 1.1 }}
+          >
+            <Tooltip sticky opacity={0.96}>
+              <strong>{tile.siteName}</strong><br />
+              {String(tile.hour).padStart(2, "0")}:00 · {tile.temperature.toFixed(1)}°C
+            </Tooltip>
+          </Polygon>
+        );
+      })}
       {sites.map((site) => (
         <Marker
           key={site.id}

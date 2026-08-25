@@ -12,7 +12,7 @@ import {
   type HourlyCurve,
   type TemperatureBand,
 } from "../lib/engine";
-import type { MapSite } from "./HeatMap";
+import type { MapHeatTile, MapSite } from "./HeatMap";
 
 const HeatMap = dynamic(() => import("./HeatMap"), {
   ssr: false,
@@ -24,6 +24,7 @@ type SiteHour = { mean: number; min: number; max: number };
 type ApiResponse = { date: string; sites: Record<string, Record<string, SiteHour>> };
 type StreamMeasurement = { siteId: string; hour: number; mean: number; min: number; max: number };
 type StreamEvent = StreamMeasurement | { done: true; date: string; partial: boolean };
+type SiteComparison = { delta: number; isCoolest: boolean };
 
 const DEMO_SITES: Site[] = [
   { id: "demo-downtown", name: "Downtown asphalt core", lat: 33.4484, lng: -112.074 },
@@ -32,7 +33,7 @@ const DEMO_SITES: Site[] = [
 ];
 const HOURS = Array.from({ length: 13 }, (_, index) => index + 6);
 const PROBE_HOUR = 12;
-const LIVE_DAY_LIMIT = 2;
+const LIVE_DAY_LIMIT = 3;
 const PRECOMPUTED_URL = "/data/demo-phoenix.json";
 
 function isoDate(daysAgo: number): string {
@@ -41,7 +42,7 @@ function isoDate(daysAgo: number): string {
   return date.toISOString().slice(0, 10);
 }
 
-const PROBE_CANDIDATES = Array.from({ length: 11 }, (_, index) => isoDate(index + 6));
+const PROBE_CANDIDATES = Array.from({ length: 16 }, (_, index) => isoDate(index + 1));
 
 function hourLabel(hour: number): string {
   return `${String(hour).padStart(2, "0")}:00`;
@@ -49,6 +50,35 @@ function hourLabel(hour: number): string {
 
 function bandClass(band: TemperatureBand): string {
   return `band-${band.toLowerCase()}`;
+}
+
+function buildHeatTiles(sites: Site[], curves: HourlyCurve, hour: number): MapHeatTile[] {
+  const tiles: MapHeatTile[] = [];
+  for (const site of sites) {
+    const reading = curves[site.id]?.find((entry) => entry.hour === hour);
+    if (!reading) continue;
+    const latStep = 100 / 111_320;
+    const lngStep = 100 / (111_320 * Math.cos((site.lat * Math.PI) / 180));
+    const south = site.lat - (250 / 111_320);
+    const west = site.lng - (250 / (111_320 * Math.cos((site.lat * Math.PI) / 180)));
+    for (let row = 0; row < 5; row += 1) {
+      for (let column = 0; column < 5; column += 1) {
+        const tileSouth = south + row * latStep;
+        const tileNorth = tileSouth + latStep;
+        const tileWest = west + column * lngStep;
+        const tileEast = tileWest + lngStep;
+        tiles.push({
+          id: `${site.id}-${hour}-${row}-${column}`,
+          siteName: site.name,
+          hour,
+          temperature: reading.mean,
+          band: classifyBand(reading.mean),
+          positions: [[tileSouth, tileWest], [tileSouth, tileEast], [tileNorth, tileEast], [tileNorth, tileWest]],
+        });
+      }
+    }
+  }
+  return tiles;
 }
 
 async function readStream(response: Response, onEvent: (event: StreamEvent) => void): Promise<void> {
@@ -88,7 +118,17 @@ function mergeMeasurement(
   return next;
 }
 
-function SiteCard({ site, curve, cardIndex }: { site: Site; curve: HourCurve[]; cardIndex: number }) {
+function SiteCard({
+  site,
+  curve,
+  cardIndex,
+  comparison,
+}: {
+  site: Site;
+  curve: HourCurve[];
+  cardIndex: number;
+  comparison?: SiteComparison;
+}) {
   const [showEvidence, setShowEvidence] = useState(false);
   const ranked = useMemo(() => rankWindows(curve), [curve]);
   const values = new Map(curve.map((entry) => [entry.hour, entry]));
@@ -100,7 +140,14 @@ function SiteCard({ site, curve, cardIndex }: { site: Site; curve: HourCurve[]; 
           <div className="site-kicker"><span className="site-dot">{site.name.slice(0, 1)}</span> {site.name}</div>
           <h2>{site.lat.toFixed(4)}, {site.lng.toFixed(4)}</h2>
         </div>
-        <span className="site-sample">{curve.length}/24 hrs</span>
+        <div className="site-header-meta">
+          {comparison && (
+            <span className={`comparison-chip ${comparison.isCoolest ? "comparison-coolest" : "comparison-warmer"}`}>
+              {comparison.isCoolest ? "Coolest" : `+${comparison.delta.toFixed(1)}°C vs coolest`}
+            </span>
+          )}
+          <span className="site-sample">{curve.length}/24 hrs</span>
+        </div>
       </div>
 
       <div className="hour-strip" aria-label={`Hourly temperature for ${site.name}`}> 
@@ -165,6 +212,8 @@ export default function HeatShiftDashboard() {
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState("");
   const [dataSource, setDataSource] = useState<"live" | "precomputed">("live");
+  const [showHeatLayer, setShowHeatLayer] = useState(false);
+  const [selectedHeatHour, setSelectedHeatHour] = useState<number | null>(null);
 
   const curves = useMemo<HourlyCurve>(() => buildHourlyCurve(dayResults), [dayResults]);
 
@@ -178,6 +227,21 @@ export default function HeatShiftDashboard() {
     }
     return best;
   }, [curves, sites]);
+
+  const heatHour = selectedHeatHour ?? summary?.hour ?? HOURS[0];
+  const heatTiles = useMemo(() => buildHeatTiles(sites, curves, heatHour), [sites, curves, heatHour]);
+  const comparisons = useMemo<Record<string, SiteComparison>>(() => {
+    if (!summary) return {};
+    const readings = sites
+      .map((site) => ({ siteId: site.id, mean: curves[site.id]?.find((entry) => entry.hour === summary.hour)?.mean }))
+      .filter((reading): reading is { siteId: string; mean: number } => typeof reading.mean === "number");
+    if (readings.length === 0) return {};
+    const coolest = Math.min(...readings.map((reading) => reading.mean));
+    return Object.fromEntries(readings.map((reading) => [
+      reading.siteId,
+      { delta: reading.mean - coolest, isCoolest: Math.abs(reading.mean - coolest) < 0.05 },
+    ]));
+  }, [curves, sites, summary]);
 
   function showToast(message: string): void {
     setToast(message);
@@ -226,6 +290,8 @@ export default function HeatShiftDashboard() {
     setSkippedCount(0);
     setError(null);
     setDataSource("live");
+    setShowHeatLayer(false);
+    setSelectedHeatHour(null);
     setPhase("idle");
     setStatusLine("");
   }
@@ -347,8 +413,34 @@ export default function HeatShiftDashboard() {
 
       <section className="control-grid">
         <div className="map-panel">
-          <div className="panel-header"><div><span className="panel-label">SITE SELECTION</span><strong>{sites.length}/3 selected</strong></div><span className="panel-hint">Click map to add · click pin to remove</span></div>
-          <HeatMap sites={sites} onAdd={addSite} onRemove={(id) => { setSites((current) => current.filter((site) => site.id !== id)); resetResults(); }} disabled={busy} />
+          <div className="panel-header">
+            <div><span className="panel-label">SITE SELECTION</span><strong>{sites.length}/3 selected</strong></div>
+            {phase === "done" && summary ? (
+              <div className="heat-layer-controls">
+                <label className="hour-select-label">
+                  Hour
+                  <select value={heatHour} onChange={(event) => setSelectedHeatHour(Number(event.target.value))}>
+                    {HOURS.map((hour) => <option value={hour} key={hour}>{hourLabel(hour)}</option>)}
+                  </select>
+                </label>
+                <button
+                  className={`heat-layer-toggle ${showHeatLayer ? "heat-layer-active" : ""}`}
+                  type="button"
+                  onClick={() => setShowHeatLayer((visible) => !visible)}
+                >
+                  {showHeatLayer ? "Hide heat layer" : "Show heat layer"}
+                </button>
+              </div>
+            ) : <span className="panel-hint">Click map to add · click pin to remove</span>}
+          </div>
+          <HeatMap
+            sites={sites}
+            heatTiles={heatTiles}
+            showHeatLayer={showHeatLayer}
+            onAdd={addSite}
+            onRemove={(id) => { setSites((current) => current.filter((site) => site.id !== id)); resetResults(); }}
+            disabled={busy}
+          />
           <div className="map-footer"><span>OpenStreetMap / FortyGuard archive</span><span>500 m site footprint</span></div>
         </div>
         <aside className="run-panel">
@@ -385,7 +477,12 @@ export default function HeatShiftDashboard() {
                   </button>
                 </span>
               )}
-              {usedDates.length > 0 && <span className="dates-used">Archive days: {usedDates.join(" · ")}</span>}
+              {usedDates.length > 0 && (
+                <>
+                  <span className="freshness-chip">Data through {usedDates[0]}</span>
+                  <span className="dates-used">Archive days: {usedDates.join(" · ")}</span>
+                </>
+              )}
               {partialCount > 0 && <span className="skip-notice">{partialCount} day{partialCount === 1 ? "" : "s"} (partial)</span>}
               {skippedCount > 0 && <span className="skip-notice">{skippedCount} day{skippedCount === 1 ? "" : "s"} skipped</span>}
             </div>
@@ -401,7 +498,15 @@ export default function HeatShiftDashboard() {
           )}
           {Object.entries(curves).map(([siteId, curve], cardIndex) => {
             const site = sites.find((candidate) => candidate.id === siteId);
-            return site ? <SiteCard key={siteId} site={site} curve={curve} cardIndex={cardIndex} /> : null;
+            return site ? (
+              <SiteCard
+                key={siteId}
+                site={site}
+                curve={curve}
+                cardIndex={cardIndex}
+                comparison={comparisons[siteId]}
+              />
+            ) : null;
           })}
           {Object.keys(curves).length === 0 && (
             <div className="empty-results">No complete hourly evidence was available for these dates.</div>
