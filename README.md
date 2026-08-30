@@ -7,7 +7,7 @@ no heatmap dashboard gives a working crew: **a decision**. Drop your job sites
 on a map, and HeatShift ranks the day's daylight work windows coolest-to-hottest
 per site, with the measured evidence behind every recommendation.
 
-Built for **FortyGuard Hackathon'26: Building the World's Temperature AI**.
+
 Author: **PizzyLee**
 
 ## The Problem
